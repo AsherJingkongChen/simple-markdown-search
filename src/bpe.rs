@@ -9,12 +9,19 @@ use std::collections::BinaryHeap;
 
 include!(concat!(env!("OUT_DIR"), "/vocabulary.rs"));
 
-/// The score of a piece, if the vocabulary has it.
-fn score(piece: &str) -> Option<f32> {
-    PIECES
-        .binary_search_by(|(candidate, _)| candidate.cmp(&piece))
-        .ok()
-        .map(|index| PIECES[index].1)
+/// The score of a piece, if the vocabulary has it, by a binary search over the sorted pieces.
+fn score(piece: &str) -> Option<i32> {
+    let (mut low, mut high) = (0, SCORES.len());
+    while low < high {
+        let middle = (low + high) / 2;
+        let candidate = &TEXT[STARTS[middle] as usize..STARTS[middle + 1] as usize];
+        match candidate.cmp(piece) {
+            Ordering::Less => low = middle + 1,
+            Ordering::Greater => high = middle,
+            Ordering::Equal => return Some(SCORES[middle]),
+        }
+    }
+    None
 }
 
 /// A run of the text, `start..end` in bytes, linked to its neighbours.
@@ -28,7 +35,7 @@ struct Symbol {
 /// A merge of two adjacent symbols, valid while the left still links to the right and the right
 /// still ends where it ended when queued. A merged-away symbol links to nothing.
 struct Pair {
-    score: f32,
+    score: i32,
     left: usize,
     right: usize,
     end: usize,
@@ -37,7 +44,7 @@ struct Pair {
 impl Ord for Pair {
     fn cmp(&self, other: &Self) -> Ordering {
         self.score
-            .total_cmp(&other.score)
+            .cmp(&other.score)
             .then_with(|| other.left.cmp(&self.left))
     }
 }
