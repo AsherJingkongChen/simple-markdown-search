@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS post (
     field INTEGER, text TEXT, id_file INTEGER REFERENCES file ON DELETE CASCADE,
     at_line INTEGER, hits INTEGER,
     PRIMARY KEY (field, text, id_file, at_line)) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS post_file ON post (id_file);
 ";
 
 /// A root as stored: its id and its absolute path.
@@ -82,9 +83,11 @@ pub fn set(connection: &mut Connection, path: &Path, dirs: &[String]) -> Result<
         return Err(Error::NoDirs(root.path));
     }
     transaction.execute("DELETE FROM file WHERE id_root = ?1", [root.id])?;
+    let mut posts = Vec::new();
     for found in walk(&root, &dirs)? {
-        insert(&transaction, &root, &found)?;
+        insert(&transaction, &root, &found, &mut posts)?;
     }
+    write(&transaction, posts)?;
     transaction.commit()?;
     Ok(())
 }
@@ -98,19 +101,21 @@ pub fn refresh(connection: &mut Connection, root: &Root) -> Result<()> {
             Ok((row.get(0)?, (row.get(1)?, row.get(2)?, row.get(3)?)))
         })?
         .collect::<rusqlite::Result<_>>()?;
+    let mut posts = Vec::new();
     for found in walk(root, &stored_dirs(&transaction, root)?)? {
         match stored.remove(&found.path) {
             Some((_, mtime, bytes)) if mtime == found.mtime && bytes == found.bytes => {}
             Some((id_file, _, _)) => {
                 delete(&transaction, id_file)?;
-                insert(&transaction, root, &found)?;
+                insert(&transaction, root, &found, &mut posts)?;
             }
-            None => insert(&transaction, root, &found)?,
+            None => insert(&transaction, root, &found, &mut posts)?,
         }
     }
     for (id_file, _, _) in stored.into_values() {
         delete(&transaction, id_file)?;
     }
+    write(&transaction, posts)?;
     transaction.commit()?;
     Ok(())
 }
@@ -197,8 +202,26 @@ fn delete(transaction: &Transaction, id_file: i64) -> Result<()> {
     Ok(())
 }
 
-/// Insert a file with its lines and postings.
-fn insert(transaction: &Transaction, root: &Root, found: &Found) -> Result<()> {
+/// A posting before it is written: its term, file, line, and count.
+type Post = (Token, i64, i64, i64);
+
+fn write(transaction: &Transaction, posts: Vec<Post>) -> Result<()> {
+    let mut statement = transaction.prepare_cached(
+        "INSERT INTO post (field, text, id_file, at_line, hits) VALUES (?1, ?2, ?3, ?4, ?5)",
+    )?;
+    for ((field, text), id_file, at_line, hits) in posts {
+        statement.execute(params![field, text, id_file, at_line, hits])?;
+    }
+    Ok(())
+}
+
+/// Insert a file with its lines, and collect its postings for `write`.
+fn insert(
+    transaction: &Transaction,
+    root: &Root,
+    found: &Found,
+    posts: &mut Vec<Post>,
+) -> Result<()> {
     let path = root.path.join(&found.path);
     let bytes = std::fs::read(&path).map_err(at(&path))?;
     let text = String::from_utf8_lossy(&bytes);
@@ -209,9 +232,6 @@ fn insert(transaction: &Transaction, root: &Root, found: &Found) -> Result<()> {
     let id_file = transaction.last_insert_rowid();
     let mut line_statement = transaction
         .prepare_cached("INSERT INTO line (id_file, at_line, tokens) VALUES (?1, ?2, ?3)")?;
-    let mut post_statement = transaction.prepare_cached(
-        "INSERT INTO post (field, text, id_file, at_line, hits) VALUES (?1, ?2, ?3, ?4, ?5)",
-    )?;
     for (index, line) in text.lines().enumerate() {
         let bag = tokens(line);
         if bag.is_empty() {
@@ -219,13 +239,14 @@ fn insert(transaction: &Transaction, root: &Root, found: &Found) -> Result<()> {
         }
         let at_line = index as i64 + 1;
         line_statement.execute(params![id_file, at_line, bag.len() as i64])?;
-        let mut hits: HashMap<&Token, i64> = HashMap::new();
-        for token in &bag {
+        let mut hits: HashMap<Token, i64> = HashMap::new();
+        for token in bag {
             *hits.entry(token).or_default() += 1;
         }
-        for ((field, text), count) in hits {
-            post_statement.execute(params![field, text, id_file, at_line, count])?;
-        }
+        posts.extend(
+            hits.into_iter()
+                .map(|(token, count)| (token, id_file, at_line, count)),
+        );
     }
     Ok(())
 }
