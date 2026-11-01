@@ -1,0 +1,29 @@
+[package]
+name = "simple-markdown-search"
+description = "Rank the lines of markdown files against a query."
+version = "0.0.1"
+edition = "2024"
+license = "MIT"
+publish = false
+repository = "https://github.com/AsherJingkongChen/simple-markdown-search"
+
+[[bin]]
+name = "sms"
+path = "src/main.rs"
+
+[dependencies]
+lexopt = "0.3.2"
+rusqlite = { version = "0.41", features = ["bundled"] }
+unicode-segmentation = "1.13.3"
+walkdir = "2.5.0"
+
+[build-dependencies]
+sentencepiece-model = "0.1.4"
+
+# A query is a fresh process, so startup and size are the budget.
+[profile.release]
+codegen-units = 1
+lto = "fat"
+opt-level = 3
+panic = "abort"
+strip = "symbols"

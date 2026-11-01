@@ -1,0 +1,5 @@
+# Latest stable: nothing here needs nightly, and the machine's toolchain is kept up to date.
+[toolchain]
+channel = "stable"
+profile = "minimal"
+components = ["rustfmt", "clippy"]
