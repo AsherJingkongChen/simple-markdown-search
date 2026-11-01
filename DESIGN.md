@@ -24,7 +24,7 @@ It is a short-lived command-line program with no resident process.
 - Query: one string.
 - Token: a string cut from text by the tokenizers.
 - Hit and scoring document: one line of a file, numbered from 1.
-- Index: one root and its dirs; every `*.md` file under those dirs.
+- Index: one root and its dirs; every `*.md` file under those dirs, outside hidden entries such as `.git`.
 - Reindex: one file when `get` finds it changed; the whole root on `set`.
 
 ## Lifecycle
@@ -45,6 +45,7 @@ A token is its field, the tokenizer that cut it, and its text, so the piece `下
 
 - `bpe`: SentencePiece BPE over a vocabulary compiled into the binary.
   It follows SentencePiece's encoder: a `▁` is prepended and spaces become `▁`; the text splits into characters; the adjacent pair whose merge is a piece with the highest score merges first, repeatedly; a symbol that is no piece falls back to its UTF-8 bytes as `<0xNN>` pieces.
+  A lone `▁`, a word start that merged with nothing, is dropped from the bag.
 - `unigram`: Unicode word boundaries (UAX #29), lowercased.
   A Han or hiragana character is a token by itself; a run of Latin letters, digits, or katakana is one token; punctuation, symbols, and spaces are dropped.
 
@@ -112,6 +113,8 @@ The table is one string of all pieces, a `u32` start per piece, and an `i32` sco
 ## Decisions
 
 - One line is the hit and the scoring document: the result is a table, and a row per line is what a grep user reads and what an agent opens with `path:line`.
+- No lone `▁`: it was in 76% of the lines of a 7,701-line root and in nearly every query, so reading its postings took 1.9 ms of a 4.3 ms `get`; without it, DRCD hit@1 and hit@5 stay .788 and .881.
+- No hidden entries: the `.git` of two indexed dirs held 403 of the 448 dirs walked, and skipping them cut the walk from 1.9 ms to under 1 ms.
 - Three hits by default: on DRCD hit@3 is .870, and five or ten hits add only .011 and .019 for two or seven more hits to read.
 - BM25+ over BM25, TF-IDF, and query likelihood: on DRCD line retrieval (3,493 questions) hit@1 was .775, against .756, .669, and at best .770.
 - Both tokenizers over either alone: hit@1 .790, against .775 for unigram and .767 for bpe.

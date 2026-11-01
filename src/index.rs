@@ -161,12 +161,18 @@ fn stored_dirs(transaction: &Transaction, root: &Root) -> Result<Vec<String>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
-/// Every markdown file under the root's dirs. A dir that is missing or unreadable, or a file
-/// whose metadata cannot be read, fails the walk.
+/// Every markdown file under the root's dirs, outside hidden entries such as `.git`. A dir
+/// that is missing or unreadable, or a file whose metadata cannot be read, fails the walk.
 fn walk(root: &Root, dirs: &[String]) -> Result<Vec<Found>> {
     let mut found = Vec::new();
     for dir in dirs {
-        for entry in WalkDir::new(root.path.join(dir)).follow_links(true) {
+        for entry in WalkDir::new(root.path.join(dir))
+            .follow_links(true)
+            .into_iter()
+            .filter_entry(|entry| {
+                entry.depth() == 0 || !entry.file_name().as_encoded_bytes().starts_with(b".")
+            })
+        {
             let entry = entry?;
             let path = entry.path();
             if !entry.file_type().is_file()
