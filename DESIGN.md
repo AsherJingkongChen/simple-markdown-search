@@ -16,7 +16,8 @@ It is a short-lived command-line program with no resident process.
 - `sms get <root> <query> [-n LIMIT] [-c COVERAGE]` searches a root.
   The root is a path or the basename of a stored root.
   Before searching, it reindexes the files that changed since the last call.
-  It prints at most LIMIT hits (default 10), each with COVERAGE lines of context above and below (default 0).
+  It prints at most LIMIT hits (default 3), each with COVERAGE lines of context above and below (default 1).
+  The output is grep's: a hit is `path:line:text`, a context line `path-line-text`, and each hit opens with a `-- score` line, the score a fraction of the top hit's.
 
 ## Units
 
