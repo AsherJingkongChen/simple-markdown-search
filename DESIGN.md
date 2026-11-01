@@ -65,7 +65,7 @@ A printed score is a fraction of the query's perfect score, `Σ idf · (1 + δ)`
 Scores therefore compare across queries: a line that misses most of the query, or a query whose terms are nowhere, scores near 0.
 A hit needs at least 0.3, so a line that shares only a common piece with the query is never shown; with no hit left, `get` fails as no match.
 On DRCD this costs hit@1 .791 to .788 and hit@5 .906 to .881: the lower-ranked answers it hides scored under 0.3.
-On DRCD, 99% of correct first hits scored above 0.33, and 95% of the first hits for random strings below 0.29.
+On DRCD, 99% of correct first hits scored above 0.33, and only 1.1% of DRCD questions searched against notes that hold no answer reached 0.3.
 
 ## Storage
 

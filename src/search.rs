@@ -21,8 +21,9 @@ const SATURATION: f64 = 1.2;
 const LENGTH_WEIGHT: f64 = 0.75;
 /// δ: what any line holding the term earns at least.
 const FLOOR: f64 = 1.0;
-/// The least score a hit needs; a line below it is never shown. On DRCD, 99% of correct first hits scored above 0.33 and 95%
-/// of the first hits for random strings below 0.29.
+/// The least score a hit needs; a line below it is never shown. On DRCD, 99% of correct
+/// first hits scored above 0.33, and only 1.1% of DRCD questions searched against notes
+/// that hold no answer reached 0.3.
 const MIN_SCORE: f64 = 0.3;
 
 /// A scored line, `at_line` numbered from 1 in the file at `path`, relative to the root.
