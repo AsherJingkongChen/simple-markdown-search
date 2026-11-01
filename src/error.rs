@@ -32,7 +32,7 @@ pub enum Error {
     NoRoot(String),
     #[error("{name} names several roots, so give the full path: {roots}")]
     Roots { name: String, roots: String },
-    #[error("no line matches {0}")]
+    #[error("no line holds enough of {0}")]
     NoMatch(String),
 }
 

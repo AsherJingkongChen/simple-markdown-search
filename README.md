@@ -23,6 +23,9 @@ sms get ~/notes 下載 TAIDE
 sms get notes 下載 TAIDE -n 5 -c 1
 ```
 
+A query is the few words the line itself would hold, not a list of alternatives:
+each query word the line lacks lowers its score, so after a miss, drop words instead of adding synonyms.
+
 See [DESIGN.md](DESIGN.md) for how it works.
 
 ## Uninstall
