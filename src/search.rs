@@ -37,13 +37,13 @@ pub fn search(connection: &Connection, root: &Root, query: &str, limit: usize) -
             "SELECT post.id_file, post.at_line, post.hits, line.tokens
              FROM term JOIN post USING (id_term) JOIN file USING (id_file)
              JOIN line ON line.id_file = post.id_file AND line.at_line = post.at_line
-             WHERE term.text = ?1 AND file.id_root = ?2",
+             WHERE term.field = ?1 AND term.text = ?2 AND file.id_root = ?3",
         )
         .expect("the posting query should prepare");
     let mut scores: HashMap<(i64, i64), f64> = HashMap::new();
-    for term in tokens(query).into_iter().collect::<BTreeSet<_>>() {
+    for (field, text) in tokens(query).into_iter().collect::<BTreeSet<_>>() {
         let postings: Vec<(i64, i64, f64, f64)> = statement
-            .query_map(rusqlite::params![term, root.id], |row| {
+            .query_map(rusqlite::params![field, text, root.id], |row| {
                 Ok((
                     row.get(0)?,
                     row.get(1)?,

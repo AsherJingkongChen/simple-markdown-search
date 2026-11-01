@@ -10,7 +10,7 @@ use std::time::UNIX_EPOCH;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use walkdir::WalkDir;
 
-use crate::token::tokens;
+use crate::token::{Token, tokens};
 
 const SCHEMA: &str = "
 PRAGMA foreign_keys = ON;
@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS file (
 CREATE TABLE IF NOT EXISTS line (
     id_file INTEGER REFERENCES file ON DELETE CASCADE, at_line INTEGER, tokens INTEGER,
     PRIMARY KEY (id_file, at_line)) WITHOUT ROWID;
-CREATE TABLE IF NOT EXISTS term (id_term INTEGER PRIMARY KEY, text TEXT UNIQUE);
+CREATE TABLE IF NOT EXISTS term (
+    id_term INTEGER PRIMARY KEY, field INTEGER, text TEXT, UNIQUE (field, text));
 CREATE TABLE IF NOT EXISTS post (
     id_term INTEGER REFERENCES term, id_file INTEGER REFERENCES file ON DELETE CASCADE,
     at_line INTEGER, hits INTEGER,
@@ -231,7 +232,7 @@ fn delete(transaction: &Transaction, id_file: i64) {
 
 /// Insert a file with its lines and postings. `terms` caches term ids across the files of
 /// one transaction.
-fn insert(transaction: &Transaction, root: &Root, found: &Found, terms: &mut HashMap<String, i64>) {
+fn insert(transaction: &Transaction, root: &Root, found: &Found, terms: &mut HashMap<Token, i64>) {
     let text = String::from_utf8_lossy(
         &std::fs::read(root.path.join(&found.path)).expect("a walked file should be readable"),
     )
@@ -260,7 +261,7 @@ fn insert(transaction: &Transaction, root: &Root, found: &Found, terms: &mut Has
         line_statement
             .execute(params![id_file, at_line, bag.len() as i64])
             .expect("a line should insert");
-        let mut hits: HashMap<&str, i64> = HashMap::new();
+        let mut hits: HashMap<&Token, i64> = HashMap::new();
         for token in &bag {
             *hits.entry(token).or_default() += 1;
         }
@@ -274,24 +275,25 @@ fn insert(transaction: &Transaction, root: &Root, found: &Found, terms: &mut Has
 }
 
 /// The id of a term, inserted on first sight.
-fn term(transaction: &Transaction, text: &str, terms: &mut HashMap<String, i64>) -> i64 {
-    if let Some(&id) = terms.get(text) {
+fn term(transaction: &Transaction, token: &Token, terms: &mut HashMap<Token, i64>) -> i64 {
+    if let Some(&id) = terms.get(token) {
         return id;
     }
+    let (field, text) = token;
     let found: Option<i64> = transaction
-        .prepare_cached("SELECT id_term FROM term WHERE text = ?1")
+        .prepare_cached("SELECT id_term FROM term WHERE field = ?1 AND text = ?2")
         .expect("the term query should prepare")
-        .query_row([text], |row| row.get(0))
+        .query_row(params![field, text], |row| row.get(0))
         .optional()
         .expect("the term should read");
     let id = found.unwrap_or_else(|| {
         transaction
-            .prepare_cached("INSERT INTO term (text) VALUES (?1)")
+            .prepare_cached("INSERT INTO term (field, text) VALUES (?1, ?2)")
             .expect("the term insert should prepare")
-            .execute([text])
+            .execute(params![field, text])
             .expect("a term should insert");
         transaction.last_insert_rowid()
     });
-    terms.insert(text.to_owned(), id);
+    terms.insert(token.clone(), id);
     id
 }
