@@ -32,6 +32,8 @@ pub enum Error {
     NoRoot(String),
     #[error("{name} names several roots, so give the full path: {roots}")]
     Roots { name: String, roots: String },
+    #[error("no line matches {0}")]
+    NoMatch(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

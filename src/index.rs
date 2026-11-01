@@ -6,9 +6,9 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
+use std::time::{Duration, UNIX_EPOCH};
 
-use rusqlite::{Connection, Transaction, params};
+use rusqlite::{Connection, Transaction, TransactionBehavior, params};
 use walkdir::WalkDir;
 
 use crate::error::{Error, Result, at};
@@ -45,10 +45,14 @@ struct Found {
     bytes: i64,
 }
 
+/// Open the index, waiting up to five seconds for another `sms` that holds its lock. Writes
+/// begin IMMEDIATE, taking the write lock at once, so two writers queue on this wait instead
+/// of failing with SQLITE_BUSY when a read lock would need upgrading.
 pub fn open() -> Result<Connection> {
     let folder = Path::new(&std::env::var("HOME")?).join(".sms");
     std::fs::create_dir_all(&folder).map_err(at(&folder))?;
     let connection = Connection::open(folder.join("index.db"))?;
+    connection.busy_timeout(Duration::from_secs(5))?;
     connection.execute_batch(SCHEMA)?;
     Ok(connection)
 }
@@ -57,7 +61,7 @@ pub fn open() -> Result<Connection> {
 /// rebuild it from scratch.
 pub fn set(connection: &mut Connection, path: &Path, dirs: &[String]) -> Result<()> {
     let path = path.canonicalize().map_err(at(path))?;
-    let transaction = connection.transaction()?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let text = path.to_string_lossy();
     transaction.execute("INSERT OR IGNORE INTO root (path) VALUES (?1)", [&text])?;
     let id = transaction.query_row("SELECT id_root FROM root WHERE path = ?1", [&text], |row| {
@@ -87,7 +91,7 @@ pub fn set(connection: &mut Connection, path: &Path, dirs: &[String]) -> Result<
 
 /// Reindex the files that were added, changed, or removed since the index last saw them.
 pub fn refresh(connection: &mut Connection, root: &Root) -> Result<()> {
-    let transaction = connection.transaction()?;
+    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let mut stored: HashMap<String, (i64, i64, i64)> = transaction
         .prepare("SELECT path, id_file, mtime, bytes FROM file WHERE id_root = ?1")?
         .query_map([root.id], |row| {

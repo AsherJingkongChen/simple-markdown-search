@@ -95,11 +95,11 @@ fn run() -> Result<()> {
         } => {
             let root = index::find(&connection, &root)?;
             index::refresh(&mut connection, &root)?;
-            print(
-                &root,
-                &search::search(&connection, &root, &query, limit)?,
-                coverage,
-            )
+            let hits = search::search(&connection, &root, &query, limit)?;
+            if hits.is_empty() {
+                return Err(Error::NoMatch(query));
+            }
+            print(&root, &hits, coverage)
         }
     }
 }
