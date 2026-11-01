@@ -21,8 +21,7 @@ const SATURATION: f64 = 1.2;
 const LENGTH_WEIGHT: f64 = 0.75;
 /// δ: what any line holding the term earns at least.
 const FLOOR: f64 = 1.0;
-/// The least score the first hit needs for the query to match at all; the hits after it are
-/// listed whatever they score. On DRCD, 99% of correct first hits scored above 0.33 and 95%
+/// The least score a hit needs; a line below it is never shown. On DRCD, 99% of correct first hits scored above 0.33 and 95%
 /// of the first hits for random strings below 0.29.
 const MIN_SCORE: f64 = 0.3;
 
@@ -68,15 +67,19 @@ pub fn search(connection: &Connection, root: &Root, query: &str, limit: usize) -
             *scores.entry((id_file, at_line)).or_default() += idf * (saturation + FLOOR);
         }
     }
+    let order = |left: &((i64, i64), f64), right: &((i64, i64), f64)| {
+        right.1.total_cmp(&left.1).then(left.0.cmp(&right.0))
+    };
     let mut ranked: Vec<((i64, i64), f64)> = scores
         .into_iter()
         .map(|(line, score)| (line, score / perfect))
+        .filter(|(_, score)| *score >= MIN_SCORE)
         .collect();
-    ranked.sort_by(|left, right| right.1.total_cmp(&left.1).then(left.0.cmp(&right.0)));
-    if ranked.first().is_none_or(|(_, score)| *score < MIN_SCORE) {
-        return Ok(Vec::new());
+    if ranked.len() > limit {
+        ranked.select_nth_unstable_by(limit, order);
+        ranked.truncate(limit);
     }
-    ranked.truncate(limit);
+    ranked.sort_by(order);
     let mut paths = connection.prepare("SELECT path FROM file WHERE id_file = ?1")?;
     ranked
         .into_iter()
