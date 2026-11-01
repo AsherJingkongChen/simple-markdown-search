@@ -13,12 +13,15 @@ path = "src/main.rs"
 
 [dependencies]
 lexopt = "0.3.2"
-rusqlite = { version = "0.41", features = ["bundled"] }
+rusqlite = { version = "0.41", default-features = false, features = ["bundled", "cache"] }
 unicode-segmentation = "1.13.3"
 walkdir = "2.5.0"
 
 [build-dependencies]
 sentencepiece-model = "0.1.4"
+
+[lints.clippy]
+unwrap_used = "deny"
 
 # A query is a fresh process, so startup and size are the budget.
 [profile.release]
