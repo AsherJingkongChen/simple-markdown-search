@@ -17,7 +17,7 @@ It is a short-lived command-line program with no resident process.
   The root is a path or the basename of a stored root.
   Before searching, it reindexes the files that changed since the last call.
   It prints at most LIMIT hits (default 3), each with COVERAGE lines of context above and below (default 1).
-  The output is grep's: a hit is `path:line:text`, a context line `path-line-text`, and each hit opens with a `-- score` line, the score a fraction of the top hit's.
+  The output is grep's: a hit is `path:line:text`, a context line `path-line-text`, and each hit opens with a `-- score` line (see Scoring).
 
 ## Units
 
@@ -61,7 +61,11 @@ idf(t) = ln(1 + (N − n_t + 0.5) / (n_t + 0.5))
 ```
 
 N is the number of indexed lines in the root, n_t the number of those lines containing t, length a line's token count, average the mean length.
-Printed scores are fractions of the top hit's score.
+A printed score is a fraction of the query's perfect score, `Σ idf · (1 + δ)` over all its terms, what a line of average length earns holding every term once.
+Scores therefore compare across queries: a line that misses most of the query, or a query whose terms are nowhere, scores near 0.
+The query matches only when its first hit scores at least 0.3, and then all LIMIT hits are listed; otherwise `get` fails as no match.
+On DRCD the gate costs hit@1 .791 to .788 and hit@5 .906 to .900; gating every hit instead hid lower-ranked answers and dropped hit@5 to .881.
+On DRCD, 99% of correct first hits scored above 0.33, and 95% of the first hits for random strings below 0.29.
 
 ## Storage
 

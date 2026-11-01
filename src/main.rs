@@ -67,9 +67,8 @@ fn parse() -> Result<Command> {
 /// notes/rust.md:16:- A borrow cannot outlive its owner.
 /// ```
 fn print(root: &index::Root, hits: &[search::Hit], coverage: usize) -> Result<()> {
-    let top = hits.first().map_or(1.0, |hit| hit.score);
     for hit in hits {
-        println!("-- {:.2}", hit.score / top);
+        println!("-- {:.2}", hit.score);
         let path = root.path.join(&hit.path);
         let text = std::fs::read_to_string(&path).map_err(at(&path))?;
         let lines: Vec<&str> = text.lines().collect();

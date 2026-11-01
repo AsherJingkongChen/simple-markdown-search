@@ -1,6 +1,11 @@
 //! search: BM25+ over the lines of one root. Each distinct term of the query adds
 //! `idf · (tf·(k1+1) / (tf + k1·(1 − b + b·length/average)) + δ)` to every line that holds it,
 //! with `idf = ln(1 + (N − n + 0.5) / (n + 0.5))` over the N lines of the root.
+//!
+//! A score is a fraction of the query's perfect score, `Σ idf · (1 + δ)` over all its terms:
+//! what a line of average length earns holding every term once. A line that misses most of
+//! the query, or a query whose terms are nowhere, scores near 0, so scores compare across
+//! queries.
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -16,6 +21,10 @@ const SATURATION: f64 = 1.2;
 const LENGTH_WEIGHT: f64 = 0.75;
 /// δ: what any line holding the term earns at least.
 const FLOOR: f64 = 1.0;
+/// The least score the first hit needs for the query to match at all; the hits after it are
+/// listed whatever they score. On DRCD, 99% of correct first hits scored above 0.33 and 95%
+/// of the first hits for random strings below 0.29.
+const MIN_SCORE: f64 = 0.3;
 
 /// A scored line, `at_line` numbered from 1 in the file at `path`, relative to the root.
 pub struct Hit {
@@ -38,6 +47,7 @@ pub fn search(connection: &Connection, root: &Root, query: &str, limit: usize) -
          WHERE post.field = ?1 AND post.text = ?2 AND file.id_root = ?3",
     )?;
     let mut scores: HashMap<(i64, i64), f64> = HashMap::new();
+    let mut perfect = 0.0;
     for (field, text) in tokens(query).into_iter().collect::<BTreeSet<_>>() {
         let postings: Vec<(i64, i64, f64, f64)> = statement
             .query_map(params![field, text, root.id], |row| {
@@ -51,14 +61,21 @@ pub fn search(connection: &Connection, root: &Root, query: &str, limit: usize) -
             .collect::<rusqlite::Result<_>>()?;
         let holding = postings.len() as f64;
         let idf = (1.0 + (total - holding + 0.5) / (holding + 0.5)).ln();
+        perfect += idf * (1.0 + FLOOR);
         for (id_file, at_line, hits, length) in postings {
             let saturation = hits * (SATURATION + 1.0)
                 / (hits + SATURATION * (1.0 - LENGTH_WEIGHT + LENGTH_WEIGHT * length / average));
             *scores.entry((id_file, at_line)).or_default() += idf * (saturation + FLOOR);
         }
     }
-    let mut ranked: Vec<((i64, i64), f64)> = scores.into_iter().collect();
+    let mut ranked: Vec<((i64, i64), f64)> = scores
+        .into_iter()
+        .map(|(line, score)| (line, score / perfect))
+        .collect();
     ranked.sort_by(|left, right| right.1.total_cmp(&left.1).then(left.0.cmp(&right.0)));
+    if ranked.first().is_none_or(|(_, score)| *score < MIN_SCORE) {
+        return Ok(Vec::new());
+    }
     ranked.truncate(limit);
     let mut paths = connection.prepare("SELECT path FROM file WHERE id_file = ?1")?;
     ranked
