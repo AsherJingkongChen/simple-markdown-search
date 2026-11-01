@@ -112,6 +112,7 @@ The table is one string of all pieces, a `u32` start per piece, and an `i32` sco
 ## Decisions
 
 - One line is the hit and the scoring document: the result is a table, and a row per line is what a grep user reads and what an agent opens with `path:line`.
+- Three hits by default: on DRCD hit@3 is .870, and five or ten hits add only .011 and .019 for two or seven more hits to read.
 - BM25+ over BM25, TF-IDF, and query likelihood: on DRCD line retrieval (3,493 questions) hit@1 was .775, against .756, .669, and at best .770.
 - Both tokenizers over either alone: hit@1 .790, against .775 for unigram and .767 for bpe.
 - A field per tokenizer, as in Lucene's `(field, text)` terms: merging the two tokenizers' equal strings into one term dropped hit@1 from .791 to .774, since a single-character piece doubled that character's weight.
