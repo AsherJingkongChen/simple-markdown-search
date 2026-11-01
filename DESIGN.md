@@ -74,13 +74,12 @@ file (id_file INTEGER PRIMARY KEY, id_root REFERENCES root ON DELETE CASCADE,
       path TEXT, mtime INTEGER, bytes INTEGER, UNIQUE (id_root, path))
 line (id_file REFERENCES file ON DELETE CASCADE, at_line INTEGER, tokens INTEGER,
       PRIMARY KEY (id_file, at_line)) WITHOUT ROWID
-term (id_term INTEGER PRIMARY KEY, field INTEGER, text TEXT, UNIQUE (field, text))
-post (id_term REFERENCES term, id_file REFERENCES file ON DELETE CASCADE, at_line INTEGER, hits INTEGER,
-      PRIMARY KEY (id_term, id_file, at_line)) WITHOUT ROWID
+post (field INTEGER, text TEXT, id_file REFERENCES file ON DELETE CASCADE, at_line INTEGER, hits INTEGER,
+      PRIMARY KEY (field, text, id_file, at_line)) WITHOUT ROWID
 ```
 
 - `file.path` is relative to the root; `mtime` is in nanoseconds.
-- `term.field` is 0 for bpe and 1 for unigram.
+- A posting carries its term, `(field, text)` with field 0 for bpe and 1 for unigram, so no term outlives the file it came from.
 - `line.tokens` is the line's length for BM25+; a line with no tokens has no row.
 - `post.hits` is the term's count in the line.
   Its primary key keeps one term's postings contiguous, so a query term is one range read.
@@ -97,6 +96,7 @@ The table is one string of all pieces, a `u32` start per piece, and an `i32` sco
 
 - `build.rs`: `.model` to the static piece table.
 - `src/main.rs`: argument parsing and printing.
+- `src/error.rs`: every way sms can fail.
 - `src/bpe.rs`: the BPE tokenizer over the static table.
 - `src/unigram.rs`: the word-boundary tokenizer.
 - `src/token.rs`: both tokenizers into one bag.
@@ -113,5 +113,7 @@ The table is one string of all pieces, a `u32` start per piece, and an `i32` sco
 - No resident process: a query reads a few posting ranges in milliseconds, and the vocabulary is compiled in, so startup has nothing to load.
 - SQLite without FTS5: FTS5 scores whole rows with its own BM25; the postings table gives line scores and BM25+ directly.
 - No variant-character normalization: the notes are written in Traditional Chinese by their readers, so variants are rare.
-- Crates: rusqlite (bundled SQLite), unicode-segmentation, lexopt, and walkdir at run time; sentencepiece-model at build time only.
+- Errors: every failure is a variant of `Error` in `src/error.rs` that names what failed, carried up with `?` and printed once by `main`.
+  `expect` marks only what cannot happen, such as a walked path lying outside its root; an `Err` is never dropped.
+- Crates: rusqlite (bundled SQLite), thiserror, unicode-segmentation, lexopt, and walkdir at run time; sentencepiece-model at build time only.
   The BPE encoder and BM25+ are written here: no crate encodes from a compiled-in table, and the formula is a few lines.

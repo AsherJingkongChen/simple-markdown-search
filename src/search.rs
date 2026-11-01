@@ -4,8 +4,9 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use rusqlite::Connection;
+use rusqlite::{Connection, params};
 
+use crate::error::Result;
 use crate::index::Root;
 use crate::token::tokens;
 
@@ -24,36 +25,30 @@ pub struct Hit {
 }
 
 /// The best `limit` lines for the query, best first.
-pub fn search(connection: &Connection, root: &Root, query: &str, limit: usize) -> Vec<Hit> {
-    let (total, average): (f64, f64) = connection
-        .query_row(
-            "SELECT COUNT(*), COALESCE(AVG(line.tokens), 0) FROM line JOIN file USING (id_file) WHERE id_root = ?1",
-            [root.id],
-            |row| Ok((row.get::<_, i64>(0)? as f64, row.get(1)?)),
-        )
-        .expect("the line statistics should read");
-    let mut statement = connection
-        .prepare(
-            "SELECT post.id_file, post.at_line, post.hits, line.tokens
-             FROM term JOIN post USING (id_term) JOIN file USING (id_file)
-             JOIN line ON line.id_file = post.id_file AND line.at_line = post.at_line
-             WHERE term.field = ?1 AND term.text = ?2 AND file.id_root = ?3",
-        )
-        .expect("the posting query should prepare");
+pub fn search(connection: &Connection, root: &Root, query: &str, limit: usize) -> Result<Vec<Hit>> {
+    let (total, average): (f64, f64) = connection.query_row(
+        "SELECT COUNT(*), COALESCE(AVG(line.tokens), 0) FROM line JOIN file USING (id_file) WHERE id_root = ?1",
+        [root.id],
+        |row| Ok((row.get::<_, i64>(0)? as f64, row.get(1)?)),
+    )?;
+    let mut statement = connection.prepare(
+        "SELECT post.id_file, post.at_line, post.hits, line.tokens
+         FROM post JOIN file USING (id_file)
+         JOIN line ON line.id_file = post.id_file AND line.at_line = post.at_line
+         WHERE post.field = ?1 AND post.text = ?2 AND file.id_root = ?3",
+    )?;
     let mut scores: HashMap<(i64, i64), f64> = HashMap::new();
     for (field, text) in tokens(query).into_iter().collect::<BTreeSet<_>>() {
         let postings: Vec<(i64, i64, f64, f64)> = statement
-            .query_map(rusqlite::params![field, text, root.id], |row| {
+            .query_map(params![field, text, root.id], |row| {
                 Ok((
                     row.get(0)?,
                     row.get(1)?,
                     row.get::<_, i64>(2)? as f64,
                     row.get::<_, i64>(3)? as f64,
                 ))
-            })
-            .expect("the postings should read")
-            .collect::<Result<_, _>>()
-            .expect("each posting row should read");
+            })?
+            .collect::<rusqlite::Result<_>>()?;
         let holding = postings.len() as f64;
         let idf = (1.0 + (total - holding + 0.5) / (holding + 0.5)).ln();
         for (id_file, at_line, hits, length) in postings {
@@ -65,17 +60,15 @@ pub fn search(connection: &Connection, root: &Root, query: &str, limit: usize) -
     let mut ranked: Vec<((i64, i64), f64)> = scores.into_iter().collect();
     ranked.sort_by(|left, right| right.1.total_cmp(&left.1).then(left.0.cmp(&right.0)));
     ranked.truncate(limit);
-    let mut paths = connection
-        .prepare("SELECT path FROM file WHERE id_file = ?1")
-        .expect("the path query should prepare");
+    let mut paths = connection.prepare("SELECT path FROM file WHERE id_file = ?1")?;
     ranked
         .into_iter()
-        .map(|((id_file, at_line), score)| Hit {
-            path: paths
-                .query_row([id_file], |row| row.get(0))
-                .expect("a scored file should have a path"),
-            at_line,
-            score,
+        .map(|((id_file, at_line), score)| {
+            Ok(Hit {
+                path: paths.query_row([id_file], |row| row.get(0))?,
+                at_line,
+                score,
+            })
         })
         .collect()
 }

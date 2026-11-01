@@ -4,6 +4,7 @@
 //! sms get <root> <query...> [-n LIMIT] [-c COVERAGE]
 
 mod bpe;
+mod error;
 mod index;
 mod search;
 mod token;
@@ -14,8 +15,7 @@ use std::process::ExitCode;
 
 use lexopt::prelude::*;
 
-const USAGE: &str =
-    "usage: sms set <root> [dir...]\n       sms get <root> <query...> [-n LIMIT] [-c COVERAGE]";
+use crate::error::{Error, Result, at};
 
 enum Command {
     Set {
@@ -30,7 +30,7 @@ enum Command {
     },
 }
 
-fn parse() -> Result<Command, lexopt::Error> {
+fn parse() -> Result<Command> {
     let mut parser = lexopt::Parser::from_env();
     let mut words: Vec<String> = Vec::new();
     let mut limit = 3;
@@ -40,7 +40,7 @@ fn parse() -> Result<Command, lexopt::Error> {
             Short('n') => limit = parser.value()?.parse()?,
             Short('c') => coverage = parser.value()?.parse()?,
             Value(word) => words.push(word.string()?),
-            _ => return Err(argument.unexpected()),
+            _ => return Err(argument.unexpected().into()),
         }
     }
     match words.as_slice() {
@@ -54,7 +54,7 @@ fn parse() -> Result<Command, lexopt::Error> {
             limit,
             coverage,
         }),
-        _ => Err(USAGE.into()),
+        _ => Err(Error::Usage),
     }
 }
 
@@ -66,11 +66,12 @@ fn parse() -> Result<Command, lexopt::Error> {
 /// notes/rust.md-15-## Borrowing
 /// notes/rust.md:16:- A borrow cannot outlive its owner.
 /// ```
-fn print(root: &index::Root, hits: &[search::Hit], coverage: usize) {
+fn print(root: &index::Root, hits: &[search::Hit], coverage: usize) -> Result<()> {
     let top = hits.first().map_or(1.0, |hit| hit.score);
     for hit in hits {
         println!("-- {:.2}", hit.score / top);
-        let text = std::fs::read_to_string(root.path.join(&hit.path)).unwrap_or_default();
+        let path = root.path.join(&hit.path);
+        let text = std::fs::read_to_string(&path).map_err(at(&path))?;
         let lines: Vec<&str> = text.lines().collect();
         let at = hit.at_line as usize;
         for number in at.saturating_sub(coverage).max(1)..=(at + coverage).min(lines.len()) {
@@ -78,37 +79,36 @@ fn print(root: &index::Root, hits: &[search::Hit], coverage: usize) {
             println!("{}{mark}{number}{mark}{}", hit.path, lines[number - 1]);
         }
     }
+    Ok(())
 }
 
-fn main() -> ExitCode {
-    let command = match parse() {
-        Ok(command) => command,
-        Err(error) => {
-            eprintln!("sms: {error}\n{USAGE}");
-            return ExitCode::FAILURE;
-        }
-    };
-    let mut connection = index::open();
-    let outcome = match command {
+fn run() -> Result<()> {
+    let command = parse()?;
+    let mut connection = index::open()?;
+    match command {
         Command::Set { root, dirs } => index::set(&mut connection, &root, &dirs),
         Command::Get {
             root,
             query,
             limit,
             coverage,
-        } => index::find(&connection, &root).map(|root| {
-            index::refresh(&mut connection, &root);
+        } => {
+            let root = index::find(&connection, &root)?;
+            index::refresh(&mut connection, &root)?;
             print(
                 &root,
-                &search::search(&connection, &root, &query, limit),
+                &search::search(&connection, &root, &query, limit)?,
                 coverage,
-            );
-        }),
-    };
-    match outcome {
+            )
+        }
+    }
+}
+
+fn main() -> ExitCode {
+    match run() {
         Ok(()) => ExitCode::SUCCESS,
-        Err(message) => {
-            eprintln!("sms: {message}");
+        Err(error) => {
+            eprintln!("sms: {error}");
             ExitCode::FAILURE
         }
     }

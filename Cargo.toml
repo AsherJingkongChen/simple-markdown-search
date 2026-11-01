@@ -14,6 +14,7 @@ path = "src/main.rs"
 [dependencies]
 lexopt = "0.3.2"
 rusqlite = { version = "0.41", default-features = false, features = ["bundled", "cache"] }
+thiserror = "2"
 unicode-segmentation = "1.13.3"
 walkdir = "2.5.0"
 
@@ -21,6 +22,10 @@ walkdir = "2.5.0"
 sentencepiece-model = "0.1.4"
 
 [lints.clippy]
+let_underscore_must_use = "deny"
+lines_filter_map_ok = "deny"
+map_err_ignore = "deny"
+unused_result_ok = "deny"
 unwrap_used = "deny"
 
 # A query is a fresh process, so startup and size are the budget.

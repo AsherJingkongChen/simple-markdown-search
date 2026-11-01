@@ -7,13 +7,14 @@ use std::fmt::Write;
 
 use sentencepiece_model::{SentencePieceModel, Type};
 
-fn main() {
+fn main() -> Result<(), String> {
     println!("cargo::rerun-if-env-changed=SMS_VOCABULARY");
-    let path = std::env::var("SMS_VOCABULARY")
-        .expect("SMS_VOCABULARY should name a SentencePiece .model file, such as TAIDE-LX-7B's tokenizer.model");
+    let path = std::env::var("SMS_VOCABULARY").map_err(|error| {
+        format!("SMS_VOCABULARY should name a SentencePiece .model file, such as TAIDE-LX-7B's tokenizer.model: {error}")
+    })?;
     println!("cargo::rerun-if-changed={path}");
     let model = SentencePieceModel::from_file(&path)
-        .unwrap_or_else(|error| panic!("{path} should be a SentencePiece model: {error}"));
+        .map_err(|error| format!("{path} should be a SentencePiece model: {error}"))?;
     let mut pieces: Vec<(&str, f32)> = model
         .pieces()
         .iter()
@@ -42,5 +43,6 @@ fn main() {
     )
     .expect("a String should take writes");
     let out = std::env::var("OUT_DIR").expect("cargo should set OUT_DIR");
-    std::fs::write(format!("{out}/vocabulary.rs"), source).expect("OUT_DIR should be writable");
+    std::fs::write(format!("{out}/vocabulary.rs"), source)
+        .map_err(|error| format!("{out}/vocabulary.rs: {error}"))
 }
