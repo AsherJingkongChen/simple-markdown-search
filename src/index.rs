@@ -1,5 +1,5 @@
-//! index: the SQLite file at `~/.sms/index.db`, shared by every root. `set` rebuilds a root
-//! from scratch; `refresh`, which `get` runs first, reindexes only the files whose
+//! index: the SQLite file at `~/.cache/sms/index.db`, shared by every root. `set` rebuilds
+//! a root from scratch; `refresh`, which `get` runs first, reindexes only the files whose
 //! `(path, mtime, bytes)` changed. A file is reindexed by deleting its row, which cascades to
 //! its lines and postings, and inserting it again. A posting carries its term, so nothing
 //! outlives the file it came from. The text itself is not stored.
@@ -50,7 +50,7 @@ struct Found {
 /// begin IMMEDIATE, taking the write lock at once, so two writers queue on this wait instead
 /// of failing with SQLITE_BUSY when a read lock would need upgrading.
 pub fn open() -> Result<Connection> {
-    let folder = Path::new(&std::env::var("HOME")?).join(".sms");
+    let folder = Path::new(&std::env::var("HOME")?).join(".cache/sms");
     std::fs::create_dir_all(&folder).map_err(at(&folder))?;
     let connection = Connection::open(folder.join("index.db"))?;
     connection.busy_timeout(Duration::from_secs(5))?;

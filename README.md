@@ -32,5 +32,5 @@ See [DESIGN.md](DESIGN.md) for how it works.
 
 ```bash
 cargo uninstall simple-markdown-search
-rm -r ~/.sms
+rm -r ~/.cache/sms
 ```

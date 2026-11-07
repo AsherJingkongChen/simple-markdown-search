@@ -70,7 +70,7 @@ On DRCD, 99% of correct first hits scored above 0.33, and only 1.1% of DRCD ques
 
 ## Storage
 
-One SQLite file at `~/.sms/index.db`, shared by every root.
+One SQLite file at `~/.cache/sms/index.db`, shared by every root.
 
 ```sql
 root (id_root INTEGER PRIMARY KEY, path TEXT UNIQUE)

@@ -10,7 +10,7 @@ pub enum Error {
     Usage,
     #[error(transparent)]
     Argument(#[from] lexopt::Error),
-    #[error("HOME, where ~/.sms lives: {0}")]
+    #[error("HOME, where ~/.cache/sms lives: {0}")]
     Home(#[from] std::env::VarError),
     #[error("{}: {source}", path.display())]
     Io {
@@ -24,7 +24,7 @@ pub enum Error {
         path: PathBuf,
         source: std::time::SystemTimeError,
     },
-    #[error("~/.sms/index.db: {0}")]
+    #[error("~/.cache/sms/index.db: {0}")]
     Index(#[from] rusqlite::Error),
     #[error("name the dirs to index: sms set {} <dir>...", .0.display())]
     NoDirs(PathBuf),
